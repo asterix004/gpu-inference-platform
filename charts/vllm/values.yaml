@@ -1,0 +1,47 @@
+image:
+  repository: vllm/vllm-openai
+  tag: v0.31.0
+  pullPolicy: IfNotPresent
+
+# Ungated, Apache-2.0, fits easily on a 24-48 GB GPU.
+model: Qwen/Qwen2.5-1.5B-Instruct
+servedModelName: qwen2.5-1.5b
+
+# Extra vLLM engine args. Tune these per GPU and record the choice in the benchmark notes.
+maxModelLen: 4096
+gpuMemoryUtilization: 0.90
+extraArgs: []
+
+# Only needed for gated models (e.g. Llama). Create the secret yourself:
+#   kubectl create secret generic hf-token --from-literal=token=hf_...
+hfTokenSecret: ""
+
+resources:
+  requests:
+    cpu: "4"
+    memory: 16Gi
+    nvidia.com/gpu: 1
+  limits:
+    memory: 24Gi
+    nvidia.com/gpu: 1
+
+nodeSelector:
+  noveon.io/pool: gpu
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# Model weights are re-downloaded on every pod start. A shared filesystem or
+# pre-baked image would remove that cold-start; see docs/adr/0003.
+modelCache:
+  sizeLimit: 40Gi
+
+service:
+  type: ClusterIP
+  port: 8000
+
+serviceMonitor:
+  enabled: true
+  interval: 15s

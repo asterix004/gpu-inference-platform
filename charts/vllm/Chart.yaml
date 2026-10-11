@@ -1,0 +1,6 @@
+apiVersion: v2
+name: vllm
+description: vLLM OpenAI-compatible inference server on a single GPU, with Prometheus metrics.
+type: application
+version: 0.1.0
+appVersion: "v0.31.0"

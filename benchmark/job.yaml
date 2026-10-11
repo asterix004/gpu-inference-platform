@@ -1,0 +1,55 @@
+# In-cluster benchmark runner. `make bench` creates the bench-script ConfigMap
+# from benchmark/bench.py, substitutes the env values below, and collects the result.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vllm-bench
+  labels:
+    app.kubernetes.io/name: vllm-bench
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm-bench
+    spec:
+      restartPolicy: Never
+      # Run the client off the GPU node when a system pool exists, so it does not
+      # compete with vLLM for CPU. Falls back to any node.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: noveon.io/pool
+                    operator: In
+                    values: ["system"]
+      containers:
+        - name: bench
+          image: python:3.12-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - >-
+              pip install --quiet --disable-pip-version-check httpx==0.28.1 &&
+              python /bench/bench.py
+              --base-url "$BASE_URL"
+              --model "$MODEL"
+              --concurrency "$CONCURRENCY"
+              --gpu-hourly-usd "$GPU_HOURLY_USD"
+              --label "$LABEL"
+          env:
+            - { name: BASE_URL, value: "http://vllm:8000" }
+            - { name: MODEL, value: "qwen2.5-1.5b" }
+            - { name: CONCURRENCY, value: "1,4,16,32,64" }
+            - { name: GPU_HOURLY_USD, value: "__GPU_HOURLY_USD__" }
+            - { name: LABEL, value: "__LABEL__" }
+          resources:
+            requests: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            - { name: script, mountPath: /bench }
+      volumes:
+        - name: script
+          configMap:
+            name: bench-script

@@ -1,0 +1,50 @@
+# kube-prometheus-stack: Prometheus + Grafana + node/kube-state metrics.
+# Demo-sized: no Alertmanager, ephemeral Prometheus storage (see docs/adr/0003).
+
+alertmanager:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    # Pick up ServiceMonitors/PodMonitors from every release (GPU Operator, vLLM),
+    # not only those labelled for this Helm release.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    scrapeInterval: 15s
+    retention: 2d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1Gi
+      limits:
+        memory: 3Gi
+
+grafana:
+  defaultDashboardsTimezone: utc
+  # Dashboards are loaded from ConfigMaps labelled grafana_dashboard=1
+  # (see dashboards/ and platform/install.sh).
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi

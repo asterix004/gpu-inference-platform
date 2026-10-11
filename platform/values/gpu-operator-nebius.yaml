@@ -1,0 +1,28 @@
+# NVIDIA GPU Operator on Nebius Managed Kubernetes.
+#
+# The GPU node group uses a Nebius driver-included image (gpu_settings.drivers_preset),
+# so the operator does NOT install the driver or container toolkit. It runs the
+# device plugin, GPU feature discovery and the DCGM exporter.
+# If you set gpu_drivers_preset = null in Terraform, install with
+# GPU_OPERATOR_MANAGES_DRIVER=true and the operator will install both.
+
+driver:
+  enabled: false
+
+toolkit:
+  enabled: false
+
+devicePlugin:
+  enabled: true
+
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+
+nfd:
+  enabled: true
+
+migManager:
+  enabled: false

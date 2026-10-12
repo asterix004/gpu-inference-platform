@@ -2,8 +2,9 @@
 project_id = "project-xxxxxxxxxxxxxxxxxxxx"
 subnet_id  = "vpcsubnet-xxxxxxxxxxxxxxxxxxxx"
 
-# System pool: set to 0 until the non-GPU vCPU quota is approved.
-cpu_node_count = 2
+# System pool: 1 node fits the default quota of 2 compute instances (1 system + 1 GPU).
+# Set to 0 until the non-GPU vCPU quota is approved.
+cpu_node_count = 1
 
 # GPU pool: 1 x L40S. Set to 0 between sessions to stop GPU billing
 # while keeping the cluster (control plane + system pool still bill).

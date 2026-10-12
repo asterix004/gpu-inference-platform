@@ -8,7 +8,30 @@ It answers the questions a team asks before moving inference to a GPU cloud:
 2. What throughput and latency does one GPU deliver for my model, and at what concurrency does it saturate?
 3. **What does a million output tokens cost** on each GPU class and each cloud?
 
-> **Status:** infrastructure and platform code complete; benchmark results are added after each run under [`results/`](results/).
+> **Status:** first benchmark run on Nebius (1 x L40S, eu-north1) on 2026-10-12. GKE run pending. Raw results and the full table are in [`results/`](results/).
+
+## Results
+
+Qwen2.5-1.5B-Instruct on vLLM v0.31.0. Each request has a ~512-token prompt and generates exactly 256 output tokens. Cost uses the Nebius on-demand L40S price of **$1.55/GPU-hour**.
+
+| Concurrency | Output tok/s | TTFT p50 | TTFT p95 | E2E p95 | $ per 1M output tokens |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 188 | 23 ms | 24 ms | 1.36 s | $2.29 |
+| 4 | 682 | 47 ms | 55 ms | 1.51 s | $0.63 |
+| 16 | 2,529 | 90 ms | 172 ms | 1.65 s | $0.17 |
+| 32 | 4,111 | 190 ms | 296 ms | 2.02 s | $0.10 |
+| 64 | 6,228 | 359 ms | 586 ms | 2.72 s | **$0.069** |
+
+All 480 requests succeeded. Throughput was still climbing at concurrency 64, so the L40S was not saturated by this 1.5B model. Cost per token falls 33x between a single user and 64 concurrent users, which is why batching is the main cost lever for self-hosted inference. The p95 time-to-first-token stays under 600 ms at that load.
+
+Cost covers the GPU node only. The control plane and the 4-vCPU system node are excluded.
+
+### What the first run taught us
+
+- **Instance quota, not GPU quota, was the binding limit.** The tenant had 8 L40S GPUs but only 2 compute instances, so the system pool runs 1 node instead of 2 (`-var cpu_node_count=1`).
+- **The Service name `vllm` breaks vLLM.** Kubernetes injects `VLLM_PORT=tcp://...` for a Service named `vllm`, and vLLM reads it as its own setting and exits. The chart now sets `enableServiceLinks: false`.
+- **Synthetic filler tokens are expensive.** Strings like `context12_34` cost ~7 tokens each, so the first prompts were ~3,800 tokens and every request was rejected. The benchmark now uses common English words, measured at 516 tokens with vLLM's `/tokenize` endpoint.
+- **DCGM GPU metrics on Nebius are an open issue.** Nebius labels GPU nodes `nvidia.com/gpu.deploy.operands=false` and runs its own device plugin and host-side GPU profiling. The operator's DCGM exporter conflicts with that profiling ("third-party Profiling module returned an unrecoverable error"). The fix is a custom counters file without profiling fields (1001–1012), which is not done yet. GPU utilisation for this run is visible in the Nebius console instead.
 
 ---
 

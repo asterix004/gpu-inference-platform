@@ -44,12 +44,19 @@ def percentile(values: list[float], pct: float) -> float:
     return ordered[lo] + (ordered[hi] - ordered[lo]) * (k - lo)
 
 
+FILLER_WORDS = (
+    "cloud gpu model token cost latency memory batch cache queue power cluster node "
+    "region price budget network storage driver kernel serve scale load test metric"
+).split()
+
+
 def make_prompt(approx_tokens: int, seed: int) -> str:
-    # ~0.75 words per token for English; vary the text so prefix caching does
-    # not make every request after the first artificially cheap.
-    words = max(8, int(approx_tokens * 0.75))
+    # Common English words are about one token each. Synthetic strings such as
+    # "context12_34" cost ~7 tokens apiece and overflow the context window.
+    # The seed leads the prompt so prefix caching cannot make later requests cheap.
     base = f"Request {seed}. Summarise the trade-offs of running inference on GPUs in the cloud. "
-    filler = " ".join(f"context{seed}_{i}" for i in range(words))
+    words = max(8, approx_tokens - 20)
+    filler = " ".join(FILLER_WORDS[(seed * 7 + i * 3) % len(FILLER_WORDS)] for i in range(words))
     return base + filler
 
 

@@ -17,6 +17,9 @@ spec:
       labels:
         {{- include "vllm.selectorLabels" . | nindent 8 }}
     spec:
+      # The Service is named "vllm", so service links would inject VLLM_PORT=tcp://...
+      # which vLLM reads as its own port setting and refuses to start.
+      enableServiceLinks: false
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
       tolerations:

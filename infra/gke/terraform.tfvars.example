@@ -2,4 +2,4 @@ project_id = "your-personal-gcp-project"
 zone       = "us-central1-a"
 
 # Keep at 0 until you are ready to benchmark; GPU nodes bill per second.
-gpu_node_count = 1
+gpu_node_count = 0

@@ -72,7 +72,9 @@ resource "google_container_node_pool" "gpu" {
 
   node_config {
     machine_type = var.gpu_machine_type
-    disk_size_gb = 200
+    # pd-balanced counts against SSD_TOTAL_GB (250 GB on new projects); 64 + 100 fits.
+    # The vLLM image plus model cache needs ~15 GB.
+    disk_size_gb = 100
     labels       = { "noveon.io/pool" = "gpu" }
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
 

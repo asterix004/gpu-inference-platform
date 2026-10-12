@@ -84,7 +84,7 @@ async def one_request(client: httpx.AsyncClient, args, seed: int) -> RequestResu
                 usage = chunk.get("usage")
                 if usage:
                     output_tokens = usage.get("completion_tokens", output_tokens)
-    except (httpx.HTTPError, json.JSONDecodeError, asyncio.TimeoutError) as exc:
+    except (TimeoutError, httpx.HTTPError, json.JSONDecodeError) as exc:
         return RequestResult(False, 0, 0, 0, repr(exc))
     latency = time.perf_counter() - start
     return RequestResult(True, ttft if ttft is not None else latency, latency, output_tokens)

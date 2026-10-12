@@ -26,6 +26,22 @@ All 480 requests succeeded. Throughput was still climbing at concurrency 64, so 
 
 Cost covers the GPU node only. The control plane and the 4-vCPU system node are excluded.
 
+### Screenshots
+
+**vLLM serving metrics during the benchmark (Grafana).** The spike at 16:36 is the five concurrency steps run back to back, and latency rises with concurrency. The small bump at 16:30 is the first run, which was rejected (see below).
+
+![Grafana: vLLM token throughput and latency during the benchmark](docs/images/grafana-gpu-inference-gpu-15-min-run.png)
+
+**Cluster on Nebius: one CPU system node and one L40S GPU node.**
+
+![Nebius console: gpu-inference node groups](docs/images/gpu-inference-node-groups.png)
+
+![Nebius console: the L40S node in the GPU node group](docs/images/gpu-inference-nodes.png)
+
+**GPU node during startup.** CPU and disk activity at 16:18–16:25 is the ~10 GB vLLM image pull and model load, before the benchmark ran.
+
+![Nebius console: GPU node metrics during image pull and model load](docs/images/gpu-inference-gpu-metrics.png)
+
 ### What the first run taught us
 
 - **Instance quota, not GPU quota, was the binding limit.** The tenant had 8 L40S GPUs but only 2 compute instances, so the system pool runs 1 node instead of 2 (`-var cpu_node_count=1`).

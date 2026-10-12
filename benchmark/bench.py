@@ -45,9 +45,10 @@ def percentile(values: list[float], pct: float) -> float:
 
 
 FILLER_WORDS = (
-    "cloud gpu model token cost latency memory batch cache queue power cluster node "
-    "region price budget network storage driver kernel serve scale load test metric"
-).split()
+    "cloud", "gpu", "model", "token", "cost", "latency", "memory", "batch", "cache",
+    "queue", "power", "cluster", "node", "region", "price", "budget", "network",
+    "storage", "driver", "kernel", "serve", "scale", "load", "test", "metric",
+)
 
 
 def make_prompt(approx_tokens: int, seed: int) -> str:

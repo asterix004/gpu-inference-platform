@@ -30,17 +30,33 @@ Cost covers the GPU node only. The control plane and the 4-vCPU system node are 
 
 **vLLM serving metrics during the benchmark (Grafana).** The spike at 16:36 is the five concurrency steps run back to back, and latency rises with concurrency. The small bump at 16:30 is the first run, which was rejected (see below).
 
-![Grafana: vLLM token throughput and latency during the benchmark](docs/images/grafana-gpu-inference-gpu-15-min-run.png)
+![Grafana: vLLM token throughput and latency during the benchmark](docs/images/grafana-vllm-benchmark.png)
+
+The same panels over 30 minutes, with the benchmark in context of the idle cluster:
+
+![Grafana: vLLM panels over the last 30 minutes](docs/images/nebius-grafana-gpu-inference-15-min-graph.png)
+
+**Kubernetes API server health (kube-prometheus-stack).** The control plane stayed above 99.9% availability while the platform was installed and the benchmark ran.
+
+![Grafana: Kubernetes API server SLO dashboard](docs/images/nebius-k8s-api-server.png)
 
 **Cluster on Nebius: one CPU system node and one L40S GPU node.**
 
-![Nebius console: gpu-inference node groups](docs/images/gpu-inference-node-groups.png)
+![Nebius console: gpu-inference node groups](docs/images/nebius-gpu-inference-node-groups.png)
 
-![Nebius console: the L40S node in the GPU node group](docs/images/gpu-inference-nodes.png)
+![Nebius console: the two Kubernetes nodes as virtual machines](docs/images/nebius-node-groups.png)
+
+![Nebius console: the L40S node in the GPU node group](docs/images/nebius-nvidia-l40s.png)
+
+![Nebius console: system node group, 4 vCPU AMD Epyc Genoa](docs/images/nebius-gpu-inference-system.png)
 
 **GPU node during startup.** CPU and disk activity at 16:18–16:25 is the ~10 GB vLLM image pull and model load, before the benchmark ran.
 
-![Nebius console: GPU node metrics during image pull and model load](docs/images/gpu-inference-gpu-metrics.png)
+![Nebius console: GPU node metrics during image pull and model load](docs/images/nebius-gpu-node-metrics.png)
+
+**Teardown.** `make down` in progress: the system node is already gone and the GPU node is deleting.
+
+![Nebius console: cluster overview during teardown](docs/images/nebius-k8s-gpu-inference-overview.png)
 
 ### What the first run taught us
 

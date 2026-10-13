@@ -256,7 +256,7 @@ Prompts differ per request so vLLM's prefix cache cannot make later requests art
 
 - **The $1.55/h used for cost per token is the whole node.** An L40S node-hour bills as GPU $1.35 + 8 vCPU $0.10 + 32 GiB RAM $0.11 ≈ $1.56.
 - **No control-plane line.** The managed Kubernetes control plane did not appear on the bill, so a Nebius run costs only its nodes and disks. GKE charges a cluster management fee ($0.10/h), which its free tier offsets for one zonal cluster per billing account.
-- **The GPU is ~87% of the bill.** Disks, the system node and the control plane are noise next to GPU-hours, so the cost lever is how long the GPU node exists, not its surroundings.
+- **The GPU is ~80% of the bill, and the whole GPU node ~91%.** Disks and the system node are small next to GPU-hours, so the cost lever is how long the GPU node exists, not its surroundings.
 - **The autoscaling test cost roughly $3 more** (about 1.9 L40S node-hours: the first node for ~1 h, the initial second node ~0.6 h until the autoscaler removed it, the autoscaled node ~0.35 h). The pool starting at its maximum size cost about $0.90 of that. All Nebius work in this repo came to under $5 against a $15/month budget.
 
 ## Cost controls

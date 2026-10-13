@@ -7,6 +7,11 @@ NS             := inference
 GPU_HOURLY_USD ?=
 LABEL          ?= $(CLOUD)
 TF_EXTRA       ?=
+HELM_EXTRA     ?=
+KEDA_VERSION   ?= 2.20.2
+LOAD_MINUTES   ?= 25
+LOAD_CONCURRENCY ?= 96
+LOAD_SECONDS   = $(shell echo $$(( $(LOAD_MINUTES) * 60 )))
 
 ifeq ($(CLOUD),nebius)
 PROJECT_ID ?= $(shell nebius config list 2>/dev/null | awk '/^parent-id:/{print $$2}')
@@ -16,7 +21,7 @@ else
 TF_VARS    := $(TF_EXTRA)
 endif
 
-.PHONY: help env init plan up kubeconfig platform deploy bench report grafana gpu-off gpu-on down leftovers
+.PHONY: help env init plan up kubeconfig platform deploy bench report grafana gpu-off gpu-on down leftovers keda load
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -47,7 +52,7 @@ platform: ## Install Prometheus/Grafana, GPU Operator, dashboards
 	CLOUD=$(CLOUD) ./platform/install.sh
 
 deploy: ## Deploy vLLM (first start downloads the model; allow ~10 min)
-	helm upgrade --install vllm charts/vllm --namespace $(NS) --create-namespace --wait --timeout 25m
+	helm upgrade --install vllm charts/vllm --namespace $(NS) --create-namespace $(HELM_EXTRA) --wait --timeout 25m
 	kubectl -n $(NS) get pods -o wide
 
 bench: ## Run the in-cluster benchmark: make bench GPU_HOURLY_USD=<price> LABEL="nebius L40S"
@@ -55,12 +60,29 @@ bench: ## Run the in-cluster benchmark: make bench GPU_HOURLY_USD=<price> LABEL=
 	@mkdir -p results
 	kubectl -n $(NS) create configmap bench-script --from-file=benchmark/bench.py --dry-run=client -o yaml | kubectl apply -f -
 	kubectl -n $(NS) delete job vllm-bench --ignore-not-found
-	sed -e 's|__GPU_HOURLY_USD__|$(GPU_HOURLY_USD)|' -e 's|__LABEL__|$(LABEL)|' benchmark/job.yaml | kubectl -n $(NS) apply -f -
+	sed -e 's|__GPU_HOURLY_USD__|$(GPU_HOURLY_USD)|' -e 's|__LABEL__|$(LABEL)|' -e 's|__EXTRA_ARGS__||' benchmark/job.yaml | kubectl -n $(NS) apply -f -
 	kubectl -n $(NS) wait --for=condition=complete job/vllm-bench --timeout=45m
 	@out=results/$$(echo "$(LABEL)" | tr ' A-Z' '-a-z')-$$(date -u +%Y%m%dT%H%M%SZ).json; \
 	  kubectl -n $(NS) logs job/vllm-bench | sed -n '/=====RESULT-BEGIN=====/,/=====RESULT-END=====/p' | sed '1d;$$d' > $$out; \
 	  echo "Saved $$out"
 	$(MAKE) report
+
+keda: ## Install KEDA (for the vLLM autoscaling test)
+	helm repo add kedacore https://kedacore.github.io/charts >/dev/null
+	helm repo update kedacore >/dev/null
+	helm upgrade --install keda kedacore/keda --version $(KEDA_VERSION) --namespace keda --create-namespace --wait --timeout 10m
+
+load: ## Hold LOAD_CONCURRENCY requests for LOAD_MINUTES (autoscaling test): make load LABEL="nebius keda"
+	@mkdir -p results/autoscaling
+	kubectl -n $(NS) create configmap bench-script --from-file=benchmark/bench.py --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n $(NS) delete job vllm-bench --ignore-not-found
+	sed -e 's|__GPU_HOURLY_USD__|0|' -e 's|__LABEL__|$(LABEL)|' \
+	  -e 's|__EXTRA_ARGS__|--concurrency $(LOAD_CONCURRENCY) --duration-s $(LOAD_SECONDS)|' \
+	  benchmark/job.yaml | kubectl -n $(NS) apply -f -
+	kubectl -n $(NS) wait --for=condition=complete job/vllm-bench --timeout=$$(( $(LOAD_MINUTES) + 15 ))m
+	@out=results/autoscaling/$$(echo "$(LABEL)" | tr ' A-Z' '-a-z')-$$(date -u +%Y%m%dT%H%M%SZ).json; \
+	  kubectl -n $(NS) logs job/vllm-bench | sed -n '/=====RESULT-BEGIN=====/,/=====RESULT-END=====/p' | sed '1d;$$d' > $$out; \
+	  echo "Saved $$out"
 
 report: ## Rebuild results/SUMMARY.md from all result files
 	python3 benchmark/report.py results/*.json > results/SUMMARY.md

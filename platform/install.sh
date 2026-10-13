@@ -74,6 +74,15 @@ helm upgrade --install kps prometheus-community/kube-prometheus-stack \
 
 if [[ "$CLOUD" == "nebius" ]]; then
   log "Installing NVIDIA GPU Operator $GPU_OPERATOR_VERSION (manages driver: $GPU_OPERATOR_MANAGES_DRIVER)"
+  # Nebius labels GPU nodes gpu.deploy.operands=false (it runs its own device plugin),
+  # which stops the operator from deploying anything there, DCGM exporter included.
+  # Opt the GPU nodes back in; the operator's own device plugin stays disabled.
+  # Nodes added later (autoscaling) need the same label: re-run this script or label them.
+  kubectl label nodes -l noveon.io/pool=gpu nvidia.com/gpu.deploy.operands=true --overwrite
+  kubectl create namespace "$GPU_NS" --dry-run=client -o yaml | kubectl apply -f -
+  kubectl -n "$GPU_NS" create configmap dcgm-metrics-nebius \
+    --from-file=dcgm-metrics.csv="$ROOT/platform/values/dcgm-metrics-nebius.csv" \
+    --dry-run=client -o yaml | kubectl apply -f -
   helm upgrade --install gpu-operator nvidia/gpu-operator \
     --version "$GPU_OPERATOR_VERSION" \
     --namespace "$GPU_NS" --create-namespace \

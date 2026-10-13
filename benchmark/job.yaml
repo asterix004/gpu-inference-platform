@@ -39,12 +39,14 @@ spec:
               --concurrency "$CONCURRENCY"
               --gpu-hourly-usd "$GPU_HOURLY_USD"
               --label "$LABEL"
+              $EXTRA_ARGS
           env:
             - { name: BASE_URL, value: "http://vllm:8000" }
             - { name: MODEL, value: "qwen2.5-1.5b" }
             - { name: CONCURRENCY, value: "1,4,16,32,64" }
             - { name: GPU_HOURLY_USD, value: "__GPU_HOURLY_USD__" }
             - { name: LABEL, value: "__LABEL__" }
+            - { name: EXTRA_ARGS, value: "__EXTRA_ARGS__" }
           resources:
             requests: { cpu: "1", memory: 512Mi }
           volumeMounts:

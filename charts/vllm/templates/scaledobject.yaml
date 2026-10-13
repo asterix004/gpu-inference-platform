@@ -1,0 +1,26 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "vllm.fullname" . }}
+  labels:
+    {{- include "vllm.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "vllm.fullname" . }}
+  minReplicaCount: {{ .Values.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.maxReplicas }}
+  pollingInterval: {{ .Values.autoscaling.pollingInterval }}
+  cooldownPeriod: {{ .Values.autoscaling.cooldownPeriod }}
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.autoscaling.prometheusAddress }}
+        # Requests in flight across all replicas; KEDA divides by replica count
+        # (AverageValue) and compares with the per-replica target.
+        query: >-
+          (sum(vllm:num_requests_running{namespace="{{ .Release.Namespace }}"})
+          + sum(vllm:num_requests_waiting{namespace="{{ .Release.Namespace }}"}))
+          or vector(0)
+        threshold: {{ .Values.autoscaling.targetRequestsPerReplica | quote }}
+{{- end }}

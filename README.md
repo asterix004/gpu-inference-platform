@@ -103,7 +103,7 @@ The same panels over 30 minutes, with the benchmark in context of the idle clust
 - **Instance quota, not GPU quota, was the binding limit.** The tenant had 8 L40S GPUs but only 2 compute instances, so the system pool runs 1 node instead of 2 (`-var cpu_node_count=1`).
 - **The Service name `vllm` breaks vLLM.** Kubernetes injects `VLLM_PORT=tcp://...` for a Service named `vllm`, and vLLM reads it as its own setting and exits. The chart now sets `enableServiceLinks: false`.
 - **Synthetic filler tokens are expensive.** Strings like `context12_34` cost ~7 tokens each, so the first prompts were ~3,800 tokens and every request was rejected. The benchmark now uses common English words, measured at 516 tokens with vLLM's `/tokenize` endpoint.
-- **DCGM GPU metrics on Nebius are an open issue.** Nebius labels GPU nodes `nvidia.com/gpu.deploy.operands=false` and runs its own device plugin and host-side GPU profiling. The operator's DCGM exporter conflicts with that profiling ("third-party Profiling module returned an unrecoverable error"). The fix is a custom counters file without profiling fields (1001–1012), which is not done yet. GPU utilisation for this run is visible in the Nebius console instead.
+- **DCGM GPU metrics on Nebius need three changes (fixed).** Nebius labels GPU nodes `nvidia.com/gpu.deploy.operands=false`, runs its own device plugin, and holds the host's DCGM profiling module. The first run's exporter crashed with "third-party Profiling module returned an unrecoverable error". `platform/install.sh` now relabels GPU nodes to `operands=true`, the operator's device plugin is disabled, and the exporter uses [`dcgm-metrics-nebius.csv`](platform/values/dcgm-metrics-nebius.csv), which leaves out the profiling fields (1001–1012). GPU utilisation, memory, power and temperature now reach Grafana. The "Graphics engine active" panel stays empty on Nebius because it is a profiling metric. Nebius overrides a node-template label, so nodes added by autoscaling need the same relabel.
 
 **GKE**
 
@@ -112,6 +112,52 @@ The same panels over 30 minutes, with the benchmark in context of the idle clust
 - **Boot disks count against the SSD quota.** GKE's default pd-balanced disks use `SSD_TOTAL_GB` (250 GB on a new project). The GPU node's disk is 100 GB so that both pools fit.
 - **GKE's managed DCGM exporter only feeds Google's hosted Prometheus.** `platform/gke-dcgm-podmonitor.yaml` adds a PodMonitor, so the in-cluster Prometheus and the Grafana GPU panels get the same metrics.
 - **Use your own project for quota API calls.** Without `--billing-project`, `gcloud beta quotas` was rate-limited on gcloud's shared client project.
+
+## Autoscaling test: KEDA + Cluster Autoscaler (Nebius, 2026-10-13)
+
+The chain under test: load rises → **KEDA** adds a vLLM replica → the replica cannot fit (one GPU per node) → **Nebius's Cluster Autoscaler** adds an L40S node → the replica serves → load drops → the replica and node go away.
+
+**Setup.** The GPU pool autoscales between 1 and 2 L40S nodes (`-var gpu_node_count=1 -var gpu_max_node_count=2`). The project's quota of 2 compute instances means no separate CPU system pool, so monitoring shares the first GPU node. The vLLM chart's `autoscaling.enabled=true` creates a KEDA `ScaledObject` on requests in flight (`vllm:num_requests_running + vllm:num_requests_waiting`) with a target of 40 per replica, read from the in-cluster Prometheus. `make load` held 96 concurrent requests.
+
+| Time (UTC) | Event |
+|---|---|
+| 03:29 | The pool starts at its **maximum** (2 nodes), not its minimum. One node is cordoned so everything lands on the other. |
+| 03:50 | The idle node becomes a scale-down candidate, after `cilium-operator` is moved off it (see below). |
+| 04:01:45 | **Cluster Autoscaler removes the idle node.** Pool: 1 node. |
+| 04:02:00 | Load starts: 96 concurrent requests on 1 replica. |
+| 04:02:38 | **KEDA scales vLLM to 2** (96 in flight vs target 40). The replica is Pending (no free GPU). |
+| 04:03:03 | **Cluster Autoscaler adds an L40S node** (registered 25 s after the pod went Pending; Ready at 04:03:30). |
+| 04:11:46 | Replica 2 is Ready on the new node (~5 min image pull + ~3 min model load). Traffic splits 39/43 requests. |
+| 04:13:37 | Load stopped. |
+| 04:19:08 | **KEDA/HPA scales vLLM back to 1** (the HPA's default 5-minute scale-down window). |
+
+Throughput from the load client, per minute ([timeline](results/autoscaling/nebius-l40s-keda-20261013T0402Z-timeline.txt)):
+
+| Replicas serving | Output tok/s | TTFT p95 |
+|---|---:|---:|
+| 1 (minutes 1–9) | ~7,700 | 400–740 ms |
+| 2 (minute 11) | **10,620 (+38%)** | **213 ms (−46%)** |
+
+Zero failed requests throughout. Throughput rises 38% rather than doubling because the client holds a fixed 96 requests: two replicas each run a batch of 48 instead of one running 96. The second GPU buys lower latency at the same load, or headroom for roughly twice the users.
+
+**What the test taught us**
+
+- **Time to capacity is dominated by the image, not the node.** The L40S node was Ready 52 s after the replica went Pending. The 10 GB vLLM image and model load took another 8 minutes. A pre-pulled image or a shared model cache (runbook next steps) is the biggest lever for scale-out speed.
+- **A Nebius autoscaling pool starts at its maximum size.** Expect to pay for `max_node_count` nodes until the autoscaler removes the idle ones about 10–20 minutes later.
+- **`cilium-operator` blocks scale-down on a GPU-only cluster.** It runs 2 replicas with anti-affinity in `kube-system`, and the autoscaler will not remove a node running a non-DaemonSet `kube-system` pod. On a cluster with only the GPU pool, the second GPU node can never scale away. A small CPU system pool (needs a 3rd instance of quota) gives those pods a home.
+- **KEDA's `cooldownPeriod` applies only to scaling to zero.** Scaling 2 → 1 follows the HPA's 5-minute stabilization window. Tune that window with `advanced.horizontalPodAutoscalerConfig` if needed.
+
+### Screenshots: autoscaling
+
+**Both L40S GPUs in the autoscaling pool (Nebius console → Kubernetes cluster → GPU metrics).** Node 1 (green) hits 100% when the load starts at 23:02 (CST). The node added by the autoscaler (yellow) has 0 MB of frame buffer used until the vLLM image and model load at about 23:10, then fills to ~40 GB (vLLM's KV-cache reservation) and joins at 100% at 23:11. Both drop to 0% when the load stops at 23:14. The used-frame-buffer legend still lists the node the autoscaler removed at 23:01.
+
+![Nebius: GPU utilisation and frame buffer for both L40S nodes through scale-out and scale-in](docs/images/nebius-keda-001.png)
+
+The same view a minute later, after the load stopped:
+
+![Nebius: both GPUs back to idle after the load](docs/images/nebius-keda-002.png)
+
+Under load each L40S drew ~300 W (limit 350 W) with the SM clock at ~2.5 GHz and no throttling (peak ~55 °C). Idle with the model loaded it drew ~100 W, and ~35 W once vLLM was gone. An idle replica costs about three times the power of an empty GPU, which is the energy case for scaling replicas to zero.
 
 ---
 
@@ -202,4 +248,4 @@ Prompts differ per request so vLLM's prefix cache cannot make later requests art
 
 ## Not in scope (yet)
 
-Multi-node training, InfiniBand, autoscaling on queue depth (KEDA or Prometheus Adapter), a private API endpoint behind a bastion, and remote Terraform state. Each is listed in [`docs/runbook.md`](docs/runbook.md) as a next step, with the reason it was deferred.
+Multi-node training, InfiniBand, a private API endpoint behind a bastion, and remote Terraform state. Each is listed in [`docs/runbook.md`](docs/runbook.md) as a next step, with the reason it was deferred.

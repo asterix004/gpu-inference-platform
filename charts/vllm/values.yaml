@@ -45,3 +45,20 @@ service:
 serviceMonitor:
   enabled: true
   interval: 15s
+
+# KEDA scale-out on vLLM load (requires KEDA: `make keda`). Off by default.
+# Scales on requests in flight per replica, read from the in-cluster Prometheus.
+# Each replica needs its own GPU, so on Nebius pair this with an autoscaling GPU
+# pool (gpu_max_node_count) and the Cluster Autoscaler adds the node.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 2
+  # Target requests (running + waiting) per replica. One L40S was still scaling
+  # at 64 concurrent requests, so 40 keeps a replica busy before adding another.
+  targetRequestsPerReplica: 40
+  prometheusAddress: http://kps-kube-prometheus-stack-prometheus.monitoring:9090
+  pollingInterval: 15
+  # Scale-in waits this long after load drops (seconds).
+  cooldownPeriod: 120
+

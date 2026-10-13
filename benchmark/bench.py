@@ -141,6 +141,59 @@ async def run_level(args, concurrency: int) -> dict:
     return level
 
 
+async def run_soak(args, concurrency: int) -> dict:
+    """Hold `concurrency` requests in flight for --duration-s seconds.
+
+    Prints throughput once per --report-every-s window, so an autoscaling test
+    shows when added replicas start serving.
+    """
+    deadline = time.perf_counter() + args.duration_s
+    window: list[RequestResult] = []
+    timeline: list[dict] = []
+    all_ok = 0
+    all_failed = 0
+    limits = httpx.Limits(max_connections=concurrency, max_keepalive_connections=concurrency)
+    async with httpx.AsyncClient(timeout=httpx.Timeout(args.timeout), limits=limits) as client:
+
+        async def worker(w: int) -> None:
+            i = 0
+            while time.perf_counter() < deadline:
+                window.append(await one_request(client, args, seed=w * 1_000_000 + i))
+                i += 1
+
+        async def reporter() -> None:
+            nonlocal all_ok, all_failed
+            start = time.perf_counter()
+            while time.perf_counter() < deadline:
+                await asyncio.sleep(args.report_every_s)
+                done, window[:] = list(window), []
+                ok = [r for r in done if r.ok]
+                all_ok += len(ok)
+                all_failed += len(done) - len(ok)
+                point = {
+                    "t_s": round(time.perf_counter() - start),
+                    "output_tok_per_s": round(sum(r.output_tokens for r in ok) / args.report_every_s, 1),
+                    "ttft_p95_ms": round(percentile([r.ttft_s for r in ok], 95) * 1000, 1),
+                    "failed": len(done) - len(ok),
+                }
+                timeline.append(point)
+                print(
+                    f"t={point['t_s']:>5}s  {point['output_tok_per_s']:8.1f} tok/s  "
+                    f"TTFT p95={point['ttft_p95_ms']:7.1f} ms  failed={point['failed']}",
+                    flush=True,
+                )
+
+        await asyncio.gather(reporter(), *(worker(w) for w in range(concurrency)))
+
+    return {
+        "concurrency": concurrency,
+        "duration_s": args.duration_s,
+        "succeeded": all_ok,
+        "failed": all_failed,
+        "timeline": timeline,
+    }
+
+
 async def wait_ready(args) -> None:
     async with httpx.AsyncClient(timeout=5) as client:
         for _ in range(120):
@@ -166,12 +219,22 @@ async def main() -> None:
     p.add_argument("--warmup", type=int, default=4)
     p.add_argument("--gpu-hourly-usd", type=float, default=0.0, help="on-demand price of the GPU node")
     p.add_argument("--label", default="", help="free text, e.g. 'nebius L40S eu-north1'")
+    p.add_argument("--duration-s", type=int, default=0, help="soak mode: hold the first concurrency level this long")
+    p.add_argument("--report-every-s", type=int, default=60, help="soak mode: throughput reporting window")
     args = p.parse_args()
 
     await wait_ready(args)
     print(f"Warm-up: {args.warmup} requests", flush=True)
     async with httpx.AsyncClient(timeout=httpx.Timeout(args.timeout)) as client:
         await asyncio.gather(*(one_request(client, args, seed=-i - 1) for i in range(args.warmup)))
+
+    if args.duration_s > 0:
+        soak = await run_soak(args, int(args.concurrency.split(",")[0]))
+        report = {"label": args.label, "model": args.model, "mode": "soak", **soak}
+        print(RESULT_BEGIN)
+        print(json.dumps(report, indent=2))
+        print(RESULT_END, flush=True)
+        return
 
     levels = [await run_level(args, int(c)) for c in args.concurrency.split(",")]
     best = max(levels, key=lambda lv: lv["output_tok_per_s"])

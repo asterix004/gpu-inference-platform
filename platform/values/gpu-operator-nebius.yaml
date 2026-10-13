@@ -1,8 +1,9 @@
 # NVIDIA GPU Operator on Nebius Managed Kubernetes.
 #
 # The GPU node group uses a Nebius driver-included image (gpu_settings.drivers_preset),
-# so the operator does NOT install the driver or container toolkit. It runs the
-# device plugin, GPU feature discovery and the DCGM exporter.
+# so the operator does NOT install the driver or container toolkit. Nebius also
+# runs its own device plugin, so the operator's is disabled. The operator runs
+# GPU feature discovery, the validator and the DCGM exporter.
 # If you set gpu_drivers_preset = null in Terraform, install with
 # GPU_OPERATOR_MANAGES_DRIVER=true and the operator will install both.
 
@@ -13,10 +14,17 @@ toolkit:
   enabled: false
 
 devicePlugin:
-  enabled: true
+  enabled: false
 
 dcgmExporter:
   enabled: true
+  # Non-profiling counters only: Nebius holds the host's DCGM profiling module.
+  # platform/install.sh creates this ConfigMap from platform/values/dcgm-metrics-nebius.csv.
+  config:
+    name: dcgm-metrics-nebius
+  env:
+    - name: DCGM_EXPORTER_COLLECTORS
+      value: /etc/dcgm-exporter/dcgm-metrics.csv
   serviceMonitor:
     enabled: true
     interval: 15s

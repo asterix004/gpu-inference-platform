@@ -80,3 +80,9 @@ variable "gpu_drivers_preset" {
   type        = string
   default     = "cuda13.0"
 }
+
+variable "gpu_max_node_count" {
+  description = "Upper bound for the GPU pool. Above gpu_node_count, the pool autoscales (KEDA test); otherwise it is fixed."
+  type        = number
+  default     = 0
+}

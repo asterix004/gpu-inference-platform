@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "vllm.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: 1
+  {{- end }}
   # One GPU per node: the old pod must release the GPU before the new one can start.
   strategy:
     type: Recreate

@@ -1,0 +1,11 @@
+t=   60s    7726.9 tok/s  TTFT p95=  744.1 ms  failed=0
+t=  120s    7526.4 tok/s  TTFT p95=  630.4 ms  failed=0
+t=  180s    7825.1 tok/s  TTFT p95=  578.9 ms  failed=0
+t=  240s    7782.4 tok/s  TTFT p95=  494.8 ms  failed=0
+t=  300s    7799.5 tok/s  TTFT p95=  510.4 ms  failed=0
+t=  360s    7671.5 tok/s  TTFT p95=  413.7 ms  failed=0
+t=  420s    7637.3 tok/s  TTFT p95=  410.9 ms  failed=0
+t=  480s    7790.9 tok/s  TTFT p95=  428.8 ms  failed=0
+t=  540s    7701.3 tok/s  TTFT p95=  391.7 ms  failed=0
+t=  600s    9629.9 tok/s  TTFT p95=  408.2 ms  failed=0
+t=  660s   10619.7 tok/s  TTFT p95=  212.9 ms  failed=0

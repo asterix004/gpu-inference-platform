@@ -63,14 +63,23 @@ resource "nebius_mk8s_v1_node_group" "system" {
 # GPU pool: one L40S node by default. Scale to 0 between sessions.
 # ---------------------------------------------------------------------------
 resource "nebius_mk8s_v1_node_group" "gpu" {
-  parent_id        = nebius_mk8s_v1_cluster.this.id
-  name             = "${var.cluster_name}-gpu"
-  labels           = local.labels
-  version          = var.k8s_version
-  fixed_node_count = var.gpu_node_count
+  parent_id = nebius_mk8s_v1_cluster.this.id
+  name      = "${var.cluster_name}-gpu"
+  labels    = local.labels
+  version   = var.k8s_version
+
+  # gpu_max_node_count > gpu_node_count turns on the Cluster Autoscaler for this
+  # pool (used by the KEDA scale-out test); otherwise the pool has a fixed size.
+  fixed_node_count = var.gpu_max_node_count > var.gpu_node_count ? null : var.gpu_node_count
+  autoscaling = var.gpu_max_node_count > var.gpu_node_count ? {
+    min_node_count = var.gpu_node_count
+    max_node_count = var.gpu_max_node_count
+  } : null
 
   template = {
     metadata = {
+      # Nebius sets nvidia.com/gpu.deploy.operands=false on GPU nodes and overrides a
+      # template label, so platform/install.sh relabels the nodes instead.
       labels = { "noveon.io/pool" = "gpu" }
     }
     boot_disk = {

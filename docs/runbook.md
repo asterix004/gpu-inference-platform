@@ -24,8 +24,20 @@ sum(rate(vllm:generation_tokens_total[1m]))
 2. `make leftovers` must print empty lists.
 3. Check Billing in the console the next day.
 
+## Autoscaling test (KEDA + Cluster Autoscaler)
+```bash
+make up TF_EXTRA="-var cpu_node_count=0 -var gpu_node_count=1 -var gpu_max_node_count=2"
+make kubeconfig && make platform && make keda
+make deploy HELM_EXTRA="--set autoscaling.enabled=true"
+make load LABEL="nebius L40S keda" LOAD_MINUTES=25 LOAD_CONCURRENCY=96
+make down TF_EXTRA="-var cpu_node_count=0 -var gpu_node_count=1 -var gpu_max_node_count=2"
+```
+- The pool starts at `max_node_count`. To see a scale-up, cordon one node before `make platform` and move any `kube-system` Deployment pods off it, then wait ~10–20 min for the autoscaler to remove it.
+- Nodes added by the autoscaler come up with `nvidia.com/gpu.deploy.operands=false`. Run `kubectl label nodes -l noveon.io/pool=gpu nvidia.com/gpu.deploy.operands=true --overwrite` to get DCGM metrics from them.
+- Watch: `kubectl -n inference get hpa keda-hpa-vllm -w` and `kubectl -n kube-system get cm cluster-autoscaler-status -o yaml`.
+
 ## Next steps (deliberately deferred)
-- **Autoscaling on queue depth:** KEDA scaler on `vllm:num_requests_waiting`. Deferred because a single-GPU quota makes scale-out untestable.
+- **Pre-pulled vLLM image:** node scale-out takes <1 min, but the 10 GB image pull plus model load takes ~8 min. That is the main scale-out cost.
 - **Private control plane:** bastion or WireGuard from the Nebius solution library.
 - **Remote state:** S3 backend on Nebius Object Storage with versioning.
 - **Model cache:** shared filesystem mounted into the GPU node group to cut cold start.

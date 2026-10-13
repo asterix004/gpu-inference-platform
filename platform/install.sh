@@ -84,6 +84,8 @@ if [[ "$CLOUD" == "nebius" ]]; then
     --wait --timeout 20m
 else
   log "GKE: drivers, device plugin and DCGM metrics are managed by GKE; skipping GPU Operator"
+  log "GKE: scraping the managed DCGM exporter into in-cluster Prometheus"
+  kubectl apply -f "$ROOT/platform/gke-dcgm-podmonitor.yaml"
 fi
 
 log "Loading Grafana dashboards"

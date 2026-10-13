@@ -8,11 +8,29 @@ It answers the questions a team asks before moving inference to a GPU cloud:
 2. What throughput and latency does one GPU deliver for my model, and at what concurrency does it saturate?
 3. **What does a million output tokens cost** on each GPU class and each cloud?
 
-> **Status:** first benchmark run on Nebius (1 x L40S, eu-north1) on 2026-10-12. GKE run pending. Raw results and the full table are in [`results/`](results/).
+> **Status:** benchmarked on Nebius (1 x L40S, eu-north1) on 2026-10-12 and on GKE (1 x L4, us-central1) on 2026-10-13. Both clusters were destroyed after each run. Raw results and the full tables are in [`results/`](results/).
 
 ## Results
 
-Qwen2.5-1.5B-Instruct on vLLM v0.31.0. Each request has a ~512-token prompt and generates exactly 256 output tokens. Cost uses the Nebius on-demand L40S price of **$1.55/GPU-hour**.
+Qwen2.5-1.5B-Instruct on vLLM v0.31.0, same Helm chart and benchmark on both clouds. Each request has a ~512-token prompt and generates exactly 256 output tokens. Prices are on-demand list prices for the whole GPU node.
+
+| | Nebius L40S (eu-north1) | GKE L4 (us-central1) |
+|---|---:|---:|
+| Node | 1 GPU, 8 vCPU, 32 GiB | g2-standard-8: 1 GPU, 8 vCPU, 32 GiB |
+| Price | $1.55/h | $0.85/h |
+| Peak output tok/s (concurrency 64) | **6,228** | 2,181 |
+| TTFT p95 at concurrency 64 | **586 ms** | 1,892 ms |
+| E2E p95 at concurrency 64 | **2.72 s** | 8.72 s |
+| **$ per 1M output tokens** | **$0.069** | $0.109 |
+
+**The cheaper GPU is the more expensive way to serve tokens.** The L4 costs 45% less per hour, but the L40S delivers 2.9x the throughput, so it is 37% cheaper per output token and 3x faster to first token under load. Token generation is mostly limited by how fast the GPU can read memory, and the L40S reads memory about 2.9x faster than the L4 (864 vs 300 GB/s), which matches the throughput gap. Compare GPUs by $ per token at your target latency, not by $ per hour.
+
+All 960 requests succeeded across both runs. Cost per token falls 30x or more between one user and 64 concurrent users on both GPUs, so batching is the main cost lever for self-hosted inference. Throughput was still climbing at concurrency 64 on both, so neither GPU was saturated by this 1.5B model.
+
+<details>
+<summary>Per-concurrency results</summary>
+
+**Nebius L40S, $1.55/h**
 
 | Concurrency | Output tok/s | TTFT p50 | TTFT p95 | E2E p95 | $ per 1M output tokens |
 |---:|---:|---:|---:|---:|---:|
@@ -22,11 +40,21 @@ Qwen2.5-1.5B-Instruct on vLLM v0.31.0. Each request has a ~512-token prompt and 
 | 32 | 4,111 | 190 ms | 296 ms | 2.02 s | $0.10 |
 | 64 | 6,228 | 359 ms | 586 ms | 2.72 s | **$0.069** |
 
-All 480 requests succeeded. Throughput was still climbing at concurrency 64, so the L40S was not saturated by this 1.5B model. Cost per token falls 33x between a single user and 64 concurrent users, which is why batching is the main cost lever for self-hosted inference. The p95 time-to-first-token stays under 600 ms at that load.
+**GKE L4, $0.85/h**
 
-Cost covers the GPU node only. The control plane and the 4-vCPU system node are excluded.
+| Concurrency | Output tok/s | TTFT p50 | TTFT p95 | E2E p95 | $ per 1M output tokens |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 74 | 51 ms | 54 ms | 3.48 s | $3.21 |
+| 4 | 276 | 160 ms | 168 ms | 3.72 s | $0.86 |
+| 16 | 934 | 338 ms | 564 ms | 4.47 s | $0.25 |
+| 32 | 1,493 | 517 ms | 922 ms | 5.86 s | $0.16 |
+| 64 | 2,181 | 675 ms | 1,892 ms | 8.72 s | **$0.109** |
 
-### Screenshots
+</details>
+
+Cost covers the GPU node only. The control plane and the CPU system node are excluded on both clouds.
+
+### Screenshots: Nebius
 
 **vLLM serving metrics during the benchmark (Grafana).** The spike at 16:36 is the five concurrency steps run back to back, and latency rises with concurrency. The small bump at 16:30 is the first run, which was rejected (see below).
 
@@ -58,12 +86,32 @@ The same panels over 30 minutes, with the benchmark in context of the idle clust
 
 ![Nebius console: cluster overview during teardown](docs/images/nebius-k8s-gpu-inference-overview.png)
 
-### What the first run taught us
+### Screenshots: GKE
+
+**L4 under the benchmark (GKE Observability → Accelerators → DCGM, filtered to the vLLM pod).** GPU utilisation goes from 0 to 100% for the benchmark at about 8:52 pm CST and back to 0. The SM clock rises to ~2 GHz and the temperature to ~60 °C. The gauges show the average over the 15-minute window, not the peak.
+
+![GKE: DCGM metrics for the L4 during the benchmark](docs/images/gke-dcgm-accelerator.png)
+
+**GPU summary (Accelerators → GPU).** Idle time drops from 100% to 0 during the run. Most of the ~22 GB of memory in use is vLLM reserving 90% of the GPU at startup for its KV cache (`gpuMemoryUtilization: 0.90`), not memory pressure from the load.
+
+![GKE: GPU usage, idle time and memory for the L4](docs/images/gke-gpu-accelerator.png)
+
+### What the runs taught us
+
+**Nebius**
 
 - **Instance quota, not GPU quota, was the binding limit.** The tenant had 8 L40S GPUs but only 2 compute instances, so the system pool runs 1 node instead of 2 (`-var cpu_node_count=1`).
 - **The Service name `vllm` breaks vLLM.** Kubernetes injects `VLLM_PORT=tcp://...` for a Service named `vllm`, and vLLM reads it as its own setting and exits. The chart now sets `enableServiceLinks: false`.
 - **Synthetic filler tokens are expensive.** Strings like `context12_34` cost ~7 tokens each, so the first prompts were ~3,800 tokens and every request was rejected. The benchmark now uses common English words, measured at 516 tokens with vLLM's `/tokenize` endpoint.
 - **DCGM GPU metrics on Nebius are an open issue.** Nebius labels GPU nodes `nvidia.com/gpu.deploy.operands=false` and runs its own device plugin and host-side GPU profiling. The operator's DCGM exporter conflicts with that profiling ("third-party Profiling module returned an unrecoverable error"). The fix is a custom counters file without profiling fields (1001–1012), which is not done yet. GPU utilisation for this run is visible in the Nebius console instead.
+
+**GKE**
+
+- **A Free Trial billing account cannot use GPUs.** The global `GPUS_ALL_REGIONS` quota is 0, and an increase request was denied automatically within 10 seconds. After upgrading the billing account, the same request was approved in about a minute.
+- **Zones run out of capacity.** The first `make up` failed in us-central1-a with "does not have enough resources available". The same plan in us-central1-b succeeded, and the L4 node took 9.5 minutes to provision.
+- **Boot disks count against the SSD quota.** GKE's default pd-balanced disks use `SSD_TOTAL_GB` (250 GB on a new project). The GPU node's disk is 100 GB so that both pools fit.
+- **GKE's managed DCGM exporter only feeds Google's hosted Prometheus.** `platform/gke-dcgm-podmonitor.yaml` adds a PodMonitor, so the in-cluster Prometheus and the Grafana GPU panels get the same metrics.
+- **Use your own project for quota API calls.** Without `--billing-project`, `gcloud beta quotas` was rate-limited on gcloud's shared client project.
 
 ---
 

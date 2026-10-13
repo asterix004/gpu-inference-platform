@@ -1,0 +1,17 @@
+# GKE's managed DCGM exporter (monitoring_config DCGM) is scraped only by
+# Google Cloud Managed Prometheus. This PodMonitor lets the in-cluster
+# kube-prometheus-stack scrape it too, so the Grafana GPU panels work on GKE.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gke-managed-dcgm-exporter
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [gke-managed-system]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gke-managed-dcgm-exporter
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 15s

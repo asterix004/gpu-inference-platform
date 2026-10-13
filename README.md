@@ -240,11 +240,31 @@ Between sessions, `make gpu-off` scales the GPU pool to zero and keeps the clust
 
 Prompts differ per request so vLLM's prefix cache cannot make later requests artificially cheap. `make report` turns every run into a comparison table in `results/SUMMARY.md`.
 
+## What the runs cost
+
+**Nebius bill for the first benchmark run** (Billing → Usage, eu-north1, as of 2026-10-13 03:11 UTC):
+
+| Line item | Usage | Cost |
+|---|---:|---:|
+| NVIDIA L40S GPU | 1.03 GPU-hours | $1.39 |
+| L40S node vCPU | 8.25 vCPU-hours | $0.10 |
+| L40S node RAM | 32.99 GiB-hours | $0.11 |
+| System node vCPU (AMD Epyc Genoa) | 3.78 vCPU-hours | $0.06 |
+| System node RAM | 15.13 GiB-hours | $0.07 |
+| Network SSD disks | 274.06 GiB-hours | $0.03 |
+| **Total** | | **$1.75** |
+
+- **The $1.55/h used for cost per token is the whole node.** An L40S node-hour bills as GPU $1.35 + 8 vCPU $0.10 + 32 GiB RAM $0.11 ≈ $1.56.
+- **No control-plane line.** The managed Kubernetes control plane did not appear on the bill, so a Nebius run costs only its nodes and disks. GKE charges a cluster management fee ($0.10/h), which its free tier offsets for one zonal cluster per billing account.
+- **The GPU is ~87% of the bill.** Disks, the system node and the control plane are noise next to GPU-hours, so the cost lever is how long the GPU node exists, not its surroundings.
+- **The autoscaling test cost roughly $3 more** (about 1.9 L40S node-hours: the first node for ~1 h, the initial second node ~0.6 h until the autoscaler removed it, the autoscaled node ~0.35 h). The pool starting at its maximum size cost about $0.90 of that. All Nebius work in this repo came to under $5 against a $15/month budget.
+
 ## Cost controls
 
 - One GPU node; system components are pinned to cheap CPU nodes.
 - `make gpu-off` / `make down`; `make leftovers` lists any instance, disk or cluster still in the project.
-- A tenant-wide budget with 25/50/75/100% alerts is set in the Nebius console before any `apply`.
+- A tenant-wide budget with alerts (50/80/100% of $15/month) is set in the Nebius console before any `apply`. Budget alerts notify; they do not stop spending.
+- Autoscaling pools: set `gpu_max_node_count` only for the test, because Nebius creates the pool at its maximum size.
 
 ## Not in scope (yet)
 

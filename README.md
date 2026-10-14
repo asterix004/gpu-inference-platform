@@ -25,7 +25,7 @@ Qwen2.5-1.5B-Instruct on vLLM v0.31.0, same Helm chart and benchmark on both clo
 
 **The cheaper GPU is the more expensive way to serve tokens.** The L4 costs 45% less per hour, but the L40S delivers 2.9x the throughput, so it is 37% cheaper per output token and 3x faster to first token under load. Token generation is mostly limited by how fast the GPU can read memory, and the L40S reads memory about 2.9x faster than the L4 (864 vs 300 GB/s), which matches the throughput gap. Compare GPUs by $ per token at your target latency, not by $ per hour.
 
-All 960 requests succeeded across both runs. Cost per token falls 30x or more between one user and 64 concurrent users on both GPUs, so batching is the main cost lever for self-hosted inference. Throughput was still climbing at concurrency 64 on both, so neither GPU was saturated by this 1.5B model.
+All 960 requests succeeded across both runs. Cost per token falls about 30x between one user and 64 concurrent users on both GPUs (33x on the L40S, 30x on the L4), so batching is the main cost lever for self-hosted inference. Throughput was still climbing at concurrency 64 on both, so neither GPU was saturated by this 1.5B model.
 
 <details>
 <summary>Per-concurrency results</summary>

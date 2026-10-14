@@ -33,7 +33,7 @@ Two processes on gloo: an all-reduce check, then 4 training steps on a tiny rand
 
 ## Run it on Soperator
 
-1. **Quota first.** Administration → Limits: at least 6 compute instances, 16 non-GPU vCPUs, 2 L40S GPUs, and room for two shared filesystems (512 GiB + 128 GiB).
+1. **Quota first.** The only blocker today is `compute.instance.count` (2; the cluster needs 6, request 8). Non-GPU vCPUs (16) fit exactly; GPUs, disks and filesystems already fit. Full table: [runbook, *Quota for the Soperator training cluster*](../docs/runbook.md#quota-for-the-soperator-training-cluster).
 2. **Stage the recipe** (downloads the pinned recipe, creates nothing):
    ```bash
    make soperator-recipe

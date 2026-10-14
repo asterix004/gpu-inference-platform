@@ -12,6 +12,13 @@ KEDA_VERSION   ?= 2.20.2
 LOAD_MINUTES   ?= 25
 LOAD_CONCURRENCY ?= 96
 LOAD_SECONDS   = $(shell echo $$(( $(LOAD_MINUTES) * 60 )))
+SOPERATOR_TAG  ?= soperator-v4.1.13-2
+SOPERATOR_DIR  := training/soperator/recipe
+TRAIN_VENV     ?= .venv-train
+PYTHON         ?= python3# 3.10-3.13; on macOS: make train-smoke PYTHON=python3.12
+# Loopback rendezvous: torchrun's default hostname lookup fails on some Macs.
+SMOKE_RDZV     := --nnodes 1 --nproc_per_node 2 --master_addr 127.0.0.1 --master_port 29521
+SMOKE_ENV      := $(if $(filter Darwin,$(shell uname -s)),GLOO_SOCKET_IFNAME=lo0,)
 
 ifeq ($(CLOUD),nebius)
 PROJECT_ID ?= $(shell nebius config list 2>/dev/null | awk '/^parent-id:/{print $$2}')
@@ -21,7 +28,7 @@ else
 TF_VARS    := $(TF_EXTRA)
 endif
 
-.PHONY: help env init plan up kubeconfig platform deploy bench report grafana gpu-off gpu-on down leftovers keda load
+.PHONY: help env init plan up kubeconfig platform deploy bench report grafana gpu-off gpu-on down leftovers keda load train-smoke soperator-recipe
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -87,6 +94,21 @@ load: ## Hold LOAD_CONCURRENCY requests for LOAD_MINUTES (autoscaling test): mak
 report: ## Rebuild results/SUMMARY.md from all result files
 	python3 benchmark/report.py results/*.json > results/SUMMARY.md
 	@cat results/SUMMARY.md
+
+train-smoke: ## CPU smoke test of training/: 2-process all-reduce + 4-step LoRA run on a tiny model
+	test -x $(TRAIN_VENV)/bin/torchrun || ($(PYTHON) -m venv $(TRAIN_VENV) && $(TRAIN_VENV)/bin/pip install -q -r training/requirements.txt)
+	$(SMOKE_ENV) $(TRAIN_VENV)/bin/torchrun $(SMOKE_RDZV) training/nccl_check.py --cpu --sizes-mb 1,8 --iters 3
+	$(SMOKE_ENV) $(TRAIN_VENV)/bin/torchrun $(SMOKE_RDZV) training/finetune.py --cpu \
+	  --model yujiepan/qwen2.5-tiny-random --dataset synthetic --max-samples 64 \
+	  --max-steps 4 --per-device-batch 4 --grad-accum 1 --output-dir /tmp/train-smoke --label "cpu smoke"
+
+soperator-recipe: ## Fetch the pinned Soperator Terraform recipe and stage the L40S overrides (creates nothing)
+	test -d $(SOPERATOR_DIR) || git clone --quiet --depth 1 --branch $(SOPERATOR_TAG) https://github.com/nebius/nebius-solution-library.git $(SOPERATOR_DIR)
+	mkdir -p $(SOPERATOR_DIR)/soperator/installations/noveon
+	cp -R $(SOPERATOR_DIR)/soperator/installations/example/. $(SOPERATOR_DIR)/soperator/installations/noveon/
+	cp training/soperator/noveon-l40s.auto.tfvars.example $(SOPERATOR_DIR)/soperator/installations/noveon/noveon-l40s.auto.tfvars
+	@echo "Next: cd $(SOPERATOR_DIR)/soperator/installations/noveon, set your SSH key in noveon-l40s.auto.tfvars,"
+	@echo "      fill .envrc (NEBIUS_TENANT_ID, NEBIUS_PROJECT_ID), source it, terraform init && terraform plan"
 
 grafana: ## Port-forward Grafana to http://localhost:3000
 	@echo "user: admin  password: $$(kubectl -n monitoring get secret kps-grafana -o jsonpath='{.data.admin-password}' | base64 --decode)"

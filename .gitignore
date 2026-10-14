@@ -21,3 +21,8 @@ __pycache__/
 # OS
 .DS_Store
 .ruff_cache/
+
+# Training
+training/soperator/recipe/
+outputs/
+.venv-train/

@@ -1,0 +1,113 @@
+# Smallest Soperator cluster for this repo's training module: 2 x L40S workers, no InfiniBand.
+#
+# Overrides for the Nebius Terraform recipe, pinned to nebius-solution-library tag
+# soperator-v4.1.13-2 (Soperator 4.1.13). `make soperator-recipe` copies the recipe's example
+# installation and drops this file next to it as noveon-l40s.auto.tfvars. Terraform loads
+# *.auto.tfvars after terraform.tfvars, so every variable below replaces the example's value
+# (objects are replaced whole, which is why each one is spelled out in full).
+#
+# Footprint the recipe enforces: 3 system nodes (minimum, validated) + 1 controller + workers.
+# Here: 3 x cpu-d3 4vcpu + 1 x cpu-d3 4vcpu + 2 x L40S = 6 instances, 16 non-GPU vCPUs, 2 GPUs,
+# plus two shared filesystems (jail 512 GiB, controller spool 128 GiB).
+# Check Administration -> Limits before `terraform apply`: the default tenant quota of
+# 2 compute instances is not enough.
+
+company_name = "noveon"
+
+# Non-production: no IAM merge-request URL, deletion allowed, no backups.
+production          = false
+backups_enabled     = "force_disable"
+accounting_enabled  = false
+public_o11y_enabled = false
+
+# The example leaves this empty, which fails validation. "dev" runs the quick bootstrap
+# checks (GPU, NCCL, storage) without the long acceptance suite.
+active_checks_scope = "dev"
+
+# Shared root filesystem ("jail") for login and workers: OS image, venv, HF cache, runs.
+filestore_jail = {
+  spec = {
+    size_gibibytes       = 512
+    block_size_kibibytes = 4
+  }
+}
+allow_empty_jail_submounts = true
+filestore_jail_submounts   = []
+
+# The recipe's example also runs an NFS server pod; the jail is enough for one team.
+nfs_in_k8s = {
+  enabled = false
+}
+
+slurm_nodeset_system = {
+  min_size = 3
+  max_size = 3
+  resource = {
+    platform = "cpu-d3"
+    preset   = "4vcpu-16gb"
+  }
+  boot_disk = {
+    type                 = "NETWORK_SSD"
+    size_gibibytes       = 128
+    block_size_kibibytes = 4
+  }
+}
+
+slurm_nodeset_controller = {
+  size = 1
+  resource = {
+    platform = "cpu-d3"
+    preset   = "4vcpu-16gb"
+  }
+  boot_disk = {
+    type                 = "NETWORK_SSD"
+    size_gibibytes       = 128
+    block_size_kibibytes = 4
+  }
+}
+
+# Login pod without its own node group (runs on the system nodes); saves one instance.
+slurm_nodeset_login = {
+  size               = 1
+  node_group_enabled = false
+  resource = {
+    platform = "cpu-d3"
+    preset   = "4vcpu-16gb"
+  }
+  boot_disk = {
+    type                 = "NETWORK_SSD"
+    size_gibibytes       = 256
+    block_size_kibibytes = 4
+  }
+}
+
+slurm_nodeset_workers = [
+  {
+    name = "worker"
+    size = 2
+    autoscaling = {
+      enabled = false
+    }
+    resource = {
+      platform = "gpu-l40s-a"
+      preset   = "1gpu-8vcpu-32gb"
+    }
+    boot_disk = {
+      type                 = "NETWORK_SSD"
+      size_gibibytes       = 512 # recipe minimum for workers
+      block_size_kibibytes = 4
+    }
+    # No gpu_cluster: L40S has no InfiniBand fabric, so NCCL runs over TCP.
+    # Ephemeral nodes (lend GPUs to the inference cluster) need Nebius to enable them; see ADR 0004.
+    ephemeral_nodes = false
+    node_local_image_disk = {
+      enabled = false
+    }
+    node_local_jail_submounts = []
+  },
+]
+
+# Your SSH public key for root on the login node.
+slurm_login_ssh_root_public_keys = [
+  "ssh-ed25519 AAAA... you@laptop",
+]

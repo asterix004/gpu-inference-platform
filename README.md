@@ -205,9 +205,19 @@ platform/            install.sh + Helm values (Prometheus/Grafana, GPU Operator)
 charts/vllm/         Helm chart: vLLM server, Service, ServiceMonitor
 benchmark/           bench.py (async load generator), job.yaml, report.py
 dashboards/          Grafana dashboard: vLLM serving + DCGM GPU panels
+training/            LoRA fine-tune as a Slurm job on Soperator (see training/README.md)
 docs/                ADRs and runbook
 results/             Benchmark outputs and SUMMARY.md
 ```
+
+## Training on Slurm (Soperator)
+
+Serving runs on Kubernetes; training the same model runs as a Slurm job on [Soperator](https://github.com/nebius/soperator), Nebius's operator that runs Slurm on Kubernetes. [ADR 0004](docs/adr/0004-inference-on-kubernetes-training-on-slurm.md) explains the split; [`training/`](training/README.md) holds the job.
+
+- `training/finetune.py`: LoRA fine-tune of Qwen2.5-1.5B-Instruct with PyTorch DDP. Reports GPU-hours and **$ per 1M trained tokens**, the training counterpart of the serving benchmark's $ per 1M output tokens.
+- `training/slurm/*.sbatch`: one `torchrun` per node with a c10d rendezvous, plus an all-reduce bandwidth pre-flight (`nccl_check.py`). Plain Slurm, so the same scripts run on any Slurm cluster.
+- `training/soperator/`: overrides for Nebius's Soperator Terraform recipe (pinned `soperator-v4.1.13-2`) for 2 × L40S workers. All 68 of the recipe's variable validation rules pass offline.
+- `make train-smoke`: the whole distributed path on CPU (2 processes, gloo, tiny model). It passes; a GPU run waits on quota, because the smallest Soperator cluster needs 6 instances and this tenant allows 2.
 
 ## Quick start (Nebius)
 
@@ -268,4 +278,4 @@ Prompts differ per request so vLLM's prefix cache cannot make later requests art
 
 ## Not in scope (yet)
 
-Multi-node training, InfiniBand, a private API endpoint behind a bastion, and remote Terraform state. Each is listed in [`docs/runbook.md`](docs/runbook.md) as a next step, with the reason it was deferred.
+A GPU training run (code ready in `training/`, blocked on instance quota), InfiniBand, a private API endpoint behind a bastion, and remote Terraform state. Each is listed in [`docs/runbook.md`](docs/runbook.md) as a next step, with the reason it was deferred.

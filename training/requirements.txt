@@ -1,0 +1,8 @@
+# Training environment for finetune.py and nccl_check.py.
+# Pinned to releases at least three weeks old when this module was written (2026-10-14).
+# On Soperator, install into a venv on the shared jail: training/slurm/setup-venv.sh
+torch==2.14.0
+transformers==5.17.0
+peft==0.21.0
+datasets==5.0.1
+accelerate==1.15.0

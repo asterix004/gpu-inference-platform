@@ -37,6 +37,8 @@ make down TF_EXTRA="-var cpu_node_count=0 -var gpu_node_count=1 -var gpu_max_nod
 - Watch: `kubectl -n inference get hpa keda-hpa-vllm -w` and `kubectl -n kube-system get cm cluster-autoscaler-status -o yaml`.
 
 ## Next steps (deliberately deferred)
+- **First GPU training run on Soperator:** `training/` is smoke-tested on CPU. Needs instance quota ≥ 6 (3 system + 1 controller + 2 L40S workers), then `make soperator-recipe` → `terraform apply` (~40 min) → `sbatch training/slurm/nccl-check.sbatch` and `finetune.sbatch`. Record `training-report.json` in `results/training/`.
+- **Adapter hand-off to serving:** copy the LoRA adapter from the jail to object storage and serve it with vLLM `--enable-lora --lora-modules` via `extraArgs`.
 - **Pre-pulled vLLM image:** node scale-out takes <1 min, but the 10 GB image pull plus model load takes ~8 min. That is the main scale-out cost.
 - **Private control plane:** bastion or WireGuard from the Nebius solution library.
 - **Remote state:** S3 backend on Nebius Object Storage with versioning.

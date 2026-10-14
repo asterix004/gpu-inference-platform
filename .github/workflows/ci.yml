@@ -40,11 +40,19 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff httpx==0.28.1
-      - run: ruff check benchmark
-      - run: python -m py_compile benchmark/bench.py benchmark/report.py
+      - run: ruff check benchmark training
+      - run: python -m py_compile benchmark/bench.py benchmark/report.py training/finetune.py training/nccl_check.py
 
   shell:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: shellcheck platform/install.sh
+      - run: shellcheck platform/install.sh training/slurm/setup-venv.sh training/slurm/*.sbatch
+
+  soperator-overrides:
+    # Format check for the Soperator recipe overrides (the recipe itself is fetched by make soperator-recipe).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+      - run: cp training/soperator/noveon-l40s.auto.tfvars.example /tmp/overrides.tfvars && terraform fmt -check /tmp/overrides.tfvars

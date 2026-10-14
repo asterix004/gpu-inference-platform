@@ -2,7 +2,7 @@
 
 The inference side of this repo serves Qwen2.5-1.5B-Instruct on Kubernetes. This module trains it: a LoRA fine-tune that runs as a normal Slurm job, on one node or many, on Nebius's Soperator (Slurm running on Kubernetes). Why Slurm for training and Kubernetes for serving is in [ADR 0004](../docs/adr/0004-inference-on-kubernetes-training-on-slurm.md).
 
-**Status:** built and smoke-tested on CPU (2 processes, tiny model). Not yet run on GPUs: the smallest Soperator cluster needs 6 instances and this tenant's quota is 2. The GPU run, with its cost report, is the next step once quota allows.
+**Status:** built and smoke-tested on CPU (2 processes, tiny model). The GPU run has not happened yet. The smallest Soperator cluster needs 6 VMs and this Nebius tenant allows 2. On 2026-10-13 I requested VMs 2 → 8 (request G287530497, still pending) and non-GPU vCPUs 16 → 24 (declined on 2026-10-14; 16 still fits this layout). The VM request has been escalated to Nebius support with a written justification. The run, about 2 hours and $5–8, goes ahead when it is granted.
 
 ## Layout
 

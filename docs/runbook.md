@@ -43,7 +43,7 @@ Smallest layout from `training/soperator/noveon-l40s.auto.tfvars.example`: 3 sys
 | Quota | Needed | Tenant limit | Status |
 |---|---|---|---|
 | `compute.instance.count` (virtual machines) | 6 | 2 | **Blocker: request 8** (6 + headroom for a rolling node replacement) |
-| `compute.instance.non-gpu.vcpu` | 16 (4 × 4 vCPU) | 16 | Fits exactly; request 24 so a system node can be replaced without hitting the limit |
+| `compute.instance.non-gpu.vcpu` | 16 (4 × 4 vCPU) | 16 | Fits exactly. A request for 24 (headroom for replacing a system node) was declined on 2026-10-14, so keep CPU nodes at 4 vCPU and avoid rolling node updates during a run |
 | `compute.instance.gpu.l40s` | 2 | 8 | OK |
 | `compute.disk.count` | 6 boot disks | 12 | OK (raised from 4) |
 | `compute.disk.size.network-ssd` | 1.5 TiB (3 × 128 + 128 + 2 × 512 GiB) | 4 TiB | OK |

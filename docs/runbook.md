@@ -42,7 +42,7 @@ Smallest layout from `training/soperator/noveon-l40s.auto.tfvars.example`: 3 sys
 
 | Quota | Needed | Tenant limit | Status |
 |---|---|---|---|
-| `compute.instance.count` (virtual machines) | 6 | 2 | **Blocker.** Requested 8 on 2026-10-13 (G287530497): pending, escalated to support |
+| `compute.instance.count` (virtual machines) | 6 | 2 | **Blocker.** Requested 8 on 2026-10-13 (G287530497): pending, being followed up with support |
 | `compute.instance.non-gpu.vcpu` | 16 (4 × 4 vCPU) | 16 | Fits exactly. A request for 24 (headroom for replacing a system node) was declined on 2026-10-14, so keep CPU nodes at 4 vCPU and avoid rolling node updates during a run |
 | `compute.instance.gpu.l40s` | 2 | 8 | OK |
 | `compute.disk.count` | 6 boot disks | 12 | OK (raised from 4) |
@@ -56,7 +56,7 @@ Also check the Managed Kubernetes quotas (clusters, node groups) in the same vie
 Expected cost while up: 2 × L40S at $1.55/h plus 4 small CPU nodes and the two filesystems, roughly $3.50–4/h. `terraform destroy` from the installation directory, then `make leftovers`.
 
 ## Next steps (deliberately deferred)
-- **First GPU training run on Soperator (requested, not yet granted):** `training/` is smoke-tested on CPU. VM quota request G287530497 (2 → 8, filed 2026-10-13) is pending and escalated to Nebius support; the vCPU request (16 → 24) was declined, and 16 fits. When granted: `make soperator-recipe` → `terraform apply` (~40 min) → `sbatch training/slurm/nccl-check.sbatch` and `finetune.sbatch` → record `training-report.json` in `results/training/` → destroy.
+- **First GPU training run on Soperator (requested, not yet granted):** `training/` is smoke-tested on CPU. VM quota request G287530497 (2 → 8, filed 2026-10-13) is pending and being followed up with Nebius support; the vCPU request (16 → 24) was declined, and 16 fits. When granted: `make soperator-recipe` → `terraform apply` (~40 min) → `sbatch training/slurm/nccl-check.sbatch` and `finetune.sbatch` → record `training-report.json` in `results/training/` → destroy.
 - **Adapter hand-off to serving:** copy the LoRA adapter from the jail to object storage and serve it with vLLM `--enable-lora --lora-modules` via `extraArgs`.
 - **Pre-pulled vLLM image:** node scale-out takes <1 min, but the 10 GB image pull plus model load takes ~8 min. That is the main scale-out cost.
 - **Private control plane:** bastion or WireGuard from the Nebius solution library.

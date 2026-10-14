@@ -1,6 +1,6 @@
 # ADR 0004: Inference on Kubernetes, training on Slurm (Soperator)
 
-**Status:** accepted. The training module is built and smoke-tested on CPU. The GPU run has not happened yet. The smallest Soperator cluster needs 6 VMs and this Nebius tenant allows 2. On 2026-10-13 I requested VMs 2 → 8 (request G287530497, still pending) and non-GPU vCPUs 16 → 24 (declined on 2026-10-14; 16 still fits this layout). The VM request has been escalated to Nebius support with a written justification. The run, about 2 hours and $5–8, goes ahead when it is granted.
+**Status:** accepted. The training module is built and smoke-tested on CPU. The GPU run has not happened yet. The smallest Soperator cluster needs 6 VMs and this Nebius tenant allows 2. On 2026-10-13 I requested VMs 2 → 8 (request G287530497, still pending) and non-GPU vCPUs 16 → 24 (declined on 2026-10-14; 16 still fits this layout). The VM request is being followed up with Nebius support with a written justification. The run, about 2 hours and $5–8, goes ahead when it is granted.
 
 ## Context
 The platform serves a model on Kubernetes: vLLM behind a Service, scaled by KEDA and the Cluster Autoscaler, measured in $ per 1M output tokens. The next workload is training that model: a LoRA fine-tune today, multi-node full fine-tunes later. The two workloads want different things from a scheduler.

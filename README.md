@@ -217,7 +217,7 @@ Serving runs on Kubernetes; training the same model runs as a Slurm job on [Sope
 - `training/finetune.py`: LoRA fine-tune of Qwen2.5-1.5B-Instruct with PyTorch DDP. Reports GPU-hours and **$ per 1M trained tokens**, the training counterpart of the serving benchmark's $ per 1M output tokens.
 - `training/slurm/*.sbatch`: one `torchrun` per node with a c10d rendezvous, plus an all-reduce bandwidth pre-flight (`nccl_check.py`). Plain Slurm, so the same scripts run on any Slurm cluster.
 - `training/soperator/`: overrides for Nebius's Soperator Terraform recipe (pinned `soperator-v4.1.13-2`) for 2 × L40S workers. All 68 of the recipe's variable validation rules pass offline.
-- `make train-smoke`: the whole distributed path on CPU (2 processes, gloo, tiny model). It passes. **GPU run: requested, not yet granted.** The smallest Soperator cluster needs 6 VMs and this tenant allows 2; the VM increase (2 → 8) is pending with Nebius support and a vCPU increase was declined (16 still fits). Details in the [runbook](docs/runbook.md#quota-for-the-soperator-training-cluster).
+- `make train-smoke`: the whole distributed path on CPU (2 processes, gloo, tiny model). It passes. **GPU run: requested, not yet granted.** The smallest Soperator cluster needs 6 VMs and this tenant allows 2; the VM increase (2 → 8) is pending and being followed up with Nebius support; a vCPU increase was declined (16 still fits). Details in the [runbook](docs/runbook.md#quota-for-the-soperator-training-cluster).
 
 ## Quick start (Nebius)
 
